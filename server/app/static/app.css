@@ -1,0 +1,744 @@
+/* red-art-studio 工作台样式。
+   视觉基线:meowa.ai 生产 CSS bundle(/assets/main-BsPQOrTz.css,618,762B)
+   2026-09-20 实测复核,规格唯一来源:docs/dev/web-ui-style-spec.md(v2)。
+   铁律:零外链资源(字体本地 woff2);无框架无构建;官方 Tailwind 值
+   「抄值不抄类」,实测值写进本文件;只借视觉语言,不做计费/账号面。 */
+
+/* ===== 字体(本地 woff2,经 /static/ 白名单路由提供)===== */
+@font-face {
+  font-family: "Manrope";
+  src: url("/static/fonts/manrope-latin.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("/static/fonts/ibm-plex-mono-600-latin.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ===== 主题 token(实测原文:默认亮色 :root,暗色 [data-theme="dark"])===== */
+:root {
+  --lavender:#bdbbff;
+  --magenta:#ef2cc1;
+  --orange:#fc4c02;
+  --shadow-light:0 4px 10px #0101201a;
+  --shadow-soft:0 4px 10px #01012014;
+  --shadow-dark:0 4px 10px #0101203d;
+  --theme-canvas:#fff;
+  --theme-canvas-soft:#f6f7ff;
+  --theme-surface:#ffffffd6;
+  --theme-surface-soft:#ffffffb3;
+  --theme-surface-strong:#f6f7ffc7;
+  --theme-line:#00000014;
+  --theme-line-strong:#00000029;
+  --theme-text-primary:#000;
+  --theme-text-secondary:#0009;
+  --theme-text-muted:#0000006b;
+  --theme-header-bg:#ffffffb8;
+  --theme-hero-gradient:linear-gradient(135deg, #020214 0%, #5656a9 36%, #ef2cc1 72%, #2c9cff 100%);
+  --theme-panel-bg:linear-gradient(180deg, #0f0f3aeb, #010120f5);
+  --theme-panel-soft-bg:linear-gradient(180deg, #ffffffb3, #f8f8ff94);
+  --theme-panel-border:#ffffff1f;
+  --theme-panel-hover:#ffffff14;
+  --theme-panel-text:#fff;
+  --theme-panel-text-muted:#ffffff75;
+  --theme-panel-contrast-bg:#fff;
+  --theme-panel-contrast-text:#010120;
+  --theme-panel-contrast-border:#fff;
+  --theme-settings-bg:linear-gradient(180deg, #0e0e34, #010120);
+  --theme-input-bg:#ffffffb3;
+  --theme-input-text:#000;
+  --theme-input-border:#00000014;
+  --theme-action-bg:#010120;
+  --theme-action-text:#fff;
+  --theme-action-border:#010120;
+  --theme-action-hover-bg:#15154f;
+  --theme-inline-action-text:#010120;
+  --theme-inline-action-hover:#3535a6;
+  --theme-orb-one:#ef2cc11a;
+  --theme-orb-two:#bdbbff4d;
+  --theme-orb-three:#7dc4ff38;
+  /* 本项目自补 token(官方无对应,服务状态/错误色;亮暗各一档) */
+  --ui-error:#dc2626;
+  --ui-warn:#b45309;
+  --ui-ok:#15803d;
+  /* 分段控件实测取值(game-designer-segmented-control),亮暗恒定(官方设置面板内对比元素) */
+  --segmented-bg:#f1f5f9b8;
+  --segmented-border:#e2e8f0eb;
+  --segmented-active-bg:#0f172a;
+  --segmented-active-text:#fff;
+}
+[data-theme="dark"] {
+  --theme-canvas:#010120;
+  --theme-canvas-soft:#08082a;
+  --theme-surface:#0e0e34d6;
+  --theme-surface-soft:#ffffff14;
+  --theme-surface-strong:#0a0a28f5;
+  --theme-line:#ffffff1f;
+  --theme-line-strong:#ffffff38;
+  --theme-text-primary:#fff;
+  --theme-text-secondary:#ffffffb8;
+  --theme-text-muted:#ffffff75;
+  --theme-header-bg:#010120b8;
+  --theme-hero-gradient:linear-gradient(135deg, #fff 0%, #d8d7ff 42%, #7dc4ff 100%);
+  --theme-panel-soft-bg:linear-gradient(180deg, #ffffff1a, #ffffff0f);
+  --theme-input-bg:#ffffff14;
+  --theme-input-text:#fff;
+  --theme-input-border:#ffffff1f;
+  --theme-action-bg:#fff;
+  --theme-action-text:#010120;
+  --theme-action-border:#ffffffe0;
+  --theme-action-hover-bg:#d8d7ff;
+  --theme-inline-action-text:#fff;
+  --theme-inline-action-hover:#bdbbff;
+  --theme-orb-one:#ef2cc129;
+  --theme-orb-two:#bdbbff38;
+  --theme-orb-three:#7dc4ff33;
+  --segmented-bg:#0f172a8c;
+  --segmented-border:#ffffff1f;
+  --segmented-active-bg:#ffffffe6;
+  --segmented-active-text:#0f172a;
+  --ui-error:#f87171;
+  --ui-warn:#fbbf24;
+  --ui-ok:#4ade80;
+}
+
+/* ===== 基底(实测 html 两层底色:三光斑径向 + 主题纵向渐变)===== */
+* { box-sizing: border-box; }
+html {
+  background:
+    radial-gradient(circle at 12% 12%, #ef2cc124, transparent 26%),
+    radial-gradient(circle at 84% 18%, #bdbbff2e, transparent 28%),
+    radial-gradient(circle at 52% 0%, #7ac2ff2e, transparent 26%),
+    linear-gradient(180deg, var(--theme-canvas), var(--theme-canvas-soft) 42%, var(--theme-canvas) 100%);
+  color: var(--theme-text-primary);
+}
+body {
+  margin: 0;
+  min-height: 100vh;
+  font: 14px/1.6 "Manrope", -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+::placeholder { color: var(--theme-text-muted); opacity: 1; }
+
+/* ===== 氛围层(实测 ambient-page 双伪元素)===== */
+.ambient-page { isolation: isolate; position: relative; }
+.ambient-page::before {
+  content: "";
+  pointer-events: none;
+  z-index: -2;
+  background:
+    radial-gradient(circle at 14% 14%, #ef2cc114, transparent 24%),
+    radial-gradient(circle at 78% 16%, #bdbbff2e, transparent 22%),
+    radial-gradient(circle at 50% 100%, #55a6ff14, transparent 26%);
+  position: absolute;
+  inset: 0;
+}
+.ambient-page::after {
+  content: "";
+  pointer-events: none;
+  z-index: -1;
+  background:
+    linear-gradient(#ffffff85, #ffffff1f),
+    radial-gradient(circle at 50% 0, #ffffffa6, transparent 56%);
+  position: absolute;
+  inset: 0;
+}
+[data-theme="dark"] .ambient-page::after {
+  background:
+    linear-gradient(#ffffff0a, transparent 40%),
+    radial-gradient(circle at 50% 0, #bdbbff14, transparent 56%);
+}
+
+/* ===== 标志性元素(实测)===== */
+.glass-panel {
+  background: linear-gradient(180deg, var(--theme-surface), var(--theme-surface-strong));
+  border: 1px solid var(--theme-line);
+  box-shadow: var(--shadow-light);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+}
+.glass-panel-soft {
+  background: linear-gradient(180deg, var(--theme-surface-soft), var(--theme-surface));
+  border: 1px solid var(--theme-line);
+  box-shadow: var(--shadow-soft);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+/* 实测 gold-ring 已非金色:淡紫内描边 */
+.gold-ring { box-shadow: inset 0 0 0 1px #bdbbff33, 0 16px 36px #0101201a; }
+
+/* 分割线:渐变 1px,左右内缩(实测) */
+.divider {
+  border: 0;
+  height: 1px;
+  margin: 16px 20px;
+  background: linear-gradient(90deg, transparent, var(--theme-line-strong), transparent);
+}
+
+/* ===== 头部 ===== */
+.app-header {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--theme-line);
+  background: var(--theme-header-bg);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+}
+.app-header h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  background: var(--theme-hero-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.app-header .subtitle { margin: 0; font-size: 13px; color: var(--theme-text-muted); }
+.app-header .spacer { flex: 1; }
+
+/* 状态点:轮询进行中时呼吸 */
+.status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+  color: var(--theme-text-muted);
+}
+.status-dot::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--theme-text-muted);
+  transition: background-color .22s;
+}
+.status-dot.is-busy::before { background: var(--magenta); animation: pulse 1.4s ease-in-out infinite; }
+.status-dot.is-ok::before { background: var(--ui-ok); }
+.status-dot.is-error::before { background: var(--ui-error); }
+@keyframes pulse { 50% { opacity: .35; } }
+
+/* 主题切换(图标按钮,实测图标按钮 6-8px 圆角) */
+button.theme-toggle {
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0 8px;
+  background: var(--theme-surface-soft);
+  border: 1px solid var(--theme-line);
+  border-radius: 8px;
+  color: var(--theme-text-secondary);
+  font: inherit;
+  cursor: pointer;
+  transition: transform .22s, border-color .22s, background-color .22s, box-shadow .22s;
+}
+button.theme-toggle:hover { transform: translateY(-1px); border-color: var(--theme-line-strong); }
+
+/* ===== 模式导航(五个入口;分段控件形态)===== */
+.mode-nav {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 24px 0;
+}
+.mode-tab {
+  min-height: 40px;
+  padding: 8px 16px;
+  background: var(--theme-surface-soft);
+  border: 1px solid var(--theme-line);
+  border-radius: 12px;
+  color: var(--theme-text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform .22s, border-color .22s, background-color .22s, box-shadow .22s;
+}
+.mode-tab:hover { transform: translateY(-1px); box-shadow: 0 10px 24px #0f172a0d; }
+.mode-tab.is-active {
+  background: var(--theme-action-bg);
+  border-color: var(--theme-action-border);
+  color: var(--theme-action-text);
+}
+
+/* ===== 工作区骨架:左画布 + 右设置面板(可拖拽调宽,收起动效实测)===== */
+.workspace {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: stretch;
+  min-height: calc(100vh - 118px);
+  padding: 0 24px 24px;
+  gap: 0;
+}
+.canvas-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  padding: 24px 16px 0 0;
+}
+.settings-shell {
+  position: relative;
+  flex: 0 0 var(--settings-panel-width, 392px);
+  width: var(--settings-panel-width, 392px);
+  min-width: 0;
+  transition:
+    width .52s cubic-bezier(.22, 1, .36, 1),
+    flex-basis .52s cubic-bezier(.22, 1, .36, 1);
+}
+.settings-shell.is-collapsed { flex-basis: 0; width: 0; overflow: visible; }
+/* 可拖拽调宽手柄(实测 col-resize / 12px) */
+.workspace-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -6px;
+  width: 12px;
+  z-index: 12;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+  border: 0;
+}
+.settings-shell.is-collapsed .workspace-resize-handle { display: none; }
+/* 收起/展开按钮：悬在面板左缘（画布侧），收起后仍可见 */
+#panel-collapse {
+  position: absolute;
+  top: 24px;
+  left: -21px;
+  z-index: 13;
+  min-width: 24px;
+  padding: 0 4px;
+  min-height: 40px;
+  border-radius: 8px;
+}
+.settings-shell.is-collapsed #panel-collapse .glyph { display: inline-block; transform: rotate(180deg); }
+
+/* 左:画布/产物预览区(主面板 32px 圆角 + 卡片投影) */
+.canvas-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  border-radius: 32px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .14);
+}
+.canvas-empty {
+  margin: auto;
+  width: min(640px, 100%);
+  padding: 56px 32px;
+  border: 1px dashed var(--theme-line-strong);
+  border-radius: 24px;
+  text-align: center;
+  color: var(--theme-text-muted);
+}
+.canvas-empty-title { margin: 0 0 8px; font-size: 17px; font-weight: 700; color: var(--theme-text-secondary); }
+.canvas-empty-hint { margin: 0; font-size: 13px; }
+
+/* 会话任务列表(本轮内存态;官方历史列表的会话内替代) */
+.history-strip { display: flex; flex-wrap: wrap; gap: 8px; }
+.history-strip:empty { display: none; }
+.job-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--theme-line);
+  background: var(--theme-surface-soft);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  color: var(--theme-text-secondary);
+  cursor: pointer;
+  transition: transform .22s, border-color .22s, background-color .22s, box-shadow .22s;
+}
+.job-chip:hover { transform: translateY(-1px); box-shadow: 0 10px 24px #0f172a0d; }
+.job-chip.is-current { border-color: var(--lavender); box-shadow: inset 0 0 0 1px #bdbbff33; }
+.job-chip .chip-mode { color: var(--theme-text-muted); }
+
+/* 产物图(像素纪律渲染) */
+.result-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: center;
+}
+.result-grid img {
+  max-width: min(640px, 100%);
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 22px 48px #02061757;
+  image-rendering: pixelated;
+}
+.result-caption {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  color: var(--theme-text-muted);
+  text-align: center;
+}
+
+/* ===== 右:设置面板(深藏青渐变玻璃,亮暗同值=官方对比面板)===== */
+.settings-panel {
+  height: 100%;
+  max-height: calc(100vh - 142px);
+  overflow-y: auto;
+  padding: 16px;
+  border: 1px solid var(--theme-panel-border);
+  border-radius: 24px;
+  background: var(--theme-settings-bg);
+  color: var(--theme-panel-text);
+}
+.settings-panel section + section {
+  border-top: 1px solid var(--theme-panel-border);
+  margin-top: 16px;
+  padding-top: 16px;
+}
+.section-label {
+  font-family: "IBM Plex Mono", monospace;
+  color: var(--theme-panel-text-muted);
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+.panel-note { margin: 6px 0 0; font-size: 12px; color: var(--theme-panel-text-muted); }
+
+/* 面板内模式二级切换(extract/生成 等同组双模式) */
+.submode-bar { margin-bottom: 12px; }
+
+/* 字段标签(mono 11px/800) */
+.field-label {
+  display: block;
+  margin: 0 0 6px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+  color: var(--theme-panel-text-muted);
+}
+.field { margin-bottom: 12px; }
+.field:last-child { margin-bottom: 0; }
+.row { display: flex; gap: 12px; }
+.row > .field { flex: 1; }
+
+/* ===== 分段控件(实测 game-designer-segmented-control 值,抄值不抄类)===== */
+.segmented {
+  background: var(--segmented-bg);
+  border: 1px solid var(--segmented-border);
+  border-radius: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+}
+.segmented button {
+  flex: 1 1 auto;
+  min-height: 32px;
+  padding: 4px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--theme-panel-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform .22s, border-color .22s, background-color .22s, box-shadow .22s;
+}
+.segmented button:hover { transform: translateY(-1px); }
+.segmented button.is-active {
+  background: var(--segmented-active-bg);
+  color: var(--segmented-active-text);
+}
+
+/* ===== Prompt 输入区(实测 composer;右侧 72px 计价留白按任务书剔除)===== */
+.composer {
+  width: 100%;
+  min-height: 104px;
+  padding: 16px;
+  background: var(--theme-panel-contrast-bg);
+  border: 1px solid #e2e8f0f2;
+  border-radius: 12px;
+  color: var(--theme-panel-contrast-text);
+  font: inherit;
+  resize: vertical;
+  box-shadow: 0 10px 26px #0f172a0d;
+  outline: none;
+  transition: border-color .22s, box-shadow .22s;
+}
+.composer:focus { border-color: var(--lavender); }
+
+/* ===== 通用输入(主题 token 面)===== */
+.input, select.input, textarea.input {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 12px;
+  background: var(--theme-input-bg);
+  border: 1px solid var(--theme-input-border);
+  border-radius: 10px;
+  color: var(--theme-input-text);
+  font: inherit;
+  outline: none;
+  transition: border-color .22s, box-shadow .22s;
+}
+textarea.input { resize: vertical; }
+.input:focus { border-color: var(--theme-inline-action-hover); }
+
+/* 开关(布尔字段) */
+.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  flex: none;
+  appearance: none;
+  background: var(--theme-input-bg);
+  border: 1px solid var(--theme-input-border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color .22s, border-color .22s;
+}
+.toggle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--theme-panel-text);
+  opacity: .75;
+  transition: transform .22s;
+}
+.toggle:checked { background: var(--theme-inline-action-hover); border-color: transparent; }
+.toggle:checked::after { transform: translateX(18px); background: #fff; opacity: 1; }
+
+/* 底色五枚举色板 */
+.swatch-row { display: flex; gap: 8px; }
+.swatch {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--theme-line-strong);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform .22s, box-shadow .22s;
+}
+.swatch:hover { transform: translateY(-1px); }
+.swatch.is-active { box-shadow: inset 0 0 0 1px #bdbbff33, 0 0 0 2px var(--lavender); }
+
+/* ===== 主按钮(主题 action 面)===== */
+button.primary-btn {
+  width: 100%;
+  min-height: 38px;
+  padding: 10px 16px;
+  background: var(--theme-action-bg);
+  border: 1px solid var(--theme-action-border);
+  border-radius: 10px;
+  color: var(--theme-action-text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  cursor: pointer;
+  transition: transform .22s, border-color .22s, background-color .22s, box-shadow .22s;
+}
+button.primary-btn:hover:not(:disabled) {
+  background: var(--theme-action-hover-bg);
+  transform: translateY(-1px);
+}
+button.primary-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ===== 上传区(dropzone + 缩略图)===== */
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 96px;
+  padding: 16px;
+  border: 1px dashed var(--theme-line-strong);
+  border-radius: 12px;
+  color: var(--theme-panel-text-muted);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .22s, background-color .22s;
+}
+.dropzone:hover, .dropzone.is-over { border-color: var(--lavender); background: var(--theme-panel-hover); }
+.thumb-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.thumb {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  border: 1px solid var(--theme-panel-border);
+  overflow: visible;
+}
+.thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; display: block; }
+.thumb button {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--theme-line-strong);
+  background: var(--theme-settings-bg);
+  color: var(--theme-panel-text);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.count-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--theme-panel-hover);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  color: var(--theme-panel-text-muted);
+}
+.count-badge.is-invalid { background: var(--ui-error); color: #fff; }
+
+/* ===== 状态与错误 ===== */
+.status-line { margin-top: 12px; font-size: 13px; color: var(--theme-panel-text-muted); }
+.error-line {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--ui-error);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ===== 报告卡(如实交付:未通过必须显式呈现,禁绿勾粉饰)===== */
+.report-stack { display: flex; flex-direction: column; gap: 12px; }
+.report-card {
+  padding: 14px 16px;
+  border: 1px solid var(--theme-line);
+  border-radius: 18px;
+  box-shadow: 0 10px 24px #0f172a0d;
+}
+.report-card.is-fail { border-color: var(--ui-error); }
+.report-card.is-warn { border-color: var(--ui-warn); }
+.report-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.report-title { font-weight: 800; font-size: 13px; }
+.report-badge {
+  padding: 1px 10px;
+  border-radius: 999px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: .055em;
+}
+.report-badge.pass { background: var(--ui-ok); color: #fff; }
+.report-badge.fail { background: var(--ui-error); color: #fff; }
+.report-badge.warn { background: var(--ui-warn); color: #fff; }
+.report-body { display: grid; gap: 4px; }
+.report-row { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
+.report-key { color: var(--theme-text-muted); font-family: "IBM Plex Mono", monospace; }
+.report-value { font-family: "IBM Plex Mono", monospace; text-align: right; word-break: break-all; }
+.report-value.is-fail { color: var(--ui-error); }
+.report-warn-list { margin: 6px 0 0; padding-left: 18px; font-size: 12px; color: var(--ui-warn); }
+
+/* ===== 组件表(components.json 渲染)===== */
+.table-wrap { overflow-x: auto; border: 1px solid var(--theme-line); border-radius: 12px; }
+.components-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.components-table th, .components-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--theme-line);
+  text-align: left;
+  white-space: nowrap;
+}
+.components-table th {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+  color: var(--theme-text-muted);
+  font-weight: 800;
+}
+.components-table td.num { font-family: "IBM Plex Mono", monospace; }
+.components-table tr:last-child td { border-bottom: 0; }
+
+/* 折叠详情(逐帧 prompt 等) */
+.acc {
+  border: 1px solid var(--theme-line);
+  border-radius: 12px;
+  padding: 0 12px;
+  background: var(--theme-surface-soft);
+}
+.acc summary {
+  padding: 10px 0;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--theme-text-secondary);
+}
+.acc .acc-body { padding: 0 0 10px; }
+.acc pre {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--theme-input-bg);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 链接式次级动作(下载 JSON 等) */
+.inline-action {
+  display: inline-block;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--theme-line);
+  border-radius: 10px;
+  background: var(--theme-surface-soft);
+  color: var(--theme-inline-action-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform .22s, background-color .22s, box-shadow .22s;
+}
+.inline-action:hover { background: var(--theme-inline-action-hover); color: var(--theme-action-text); transform: translateY(-1px); }
+
+/* ===== 焦点环(实测 focus-visible)===== */
+:focus-visible { box-shadow: 0 0 0 4px #bfdbfe57; outline: none; }
+
+/* ===== 响应式(<1024px 单栏,面板移到画布下方)===== */
+@media (max-width: 1023px) {
+  .workspace { flex-direction: column; min-height: 0; }
+  .canvas-wrap { padding: 16px 0 0; }
+  .settings-shell {
+    flex: none;
+    width: 100%;
+    transition: none;
+  }
+  .workspace-resize-handle { display: none; }
+  .settings-panel { max-height: none; }
+}
