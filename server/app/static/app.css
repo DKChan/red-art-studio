@@ -22,6 +22,7 @@
 
 /* ===== 主题 token(实测原文:默认亮色 :root,暗色 [data-theme="dark"])===== */
 :root {
+  color-scheme: light;
   --lavender:#bdbbff;
   --magenta:#ef2cc1;
   --orange:#fc4c02;
@@ -73,6 +74,7 @@
   --segmented-active-text:#fff;
 }
 [data-theme="dark"] {
+  color-scheme: dark;
   --theme-canvas:#010120;
   --theme-canvas-soft:#08082a;
   --theme-surface:#0e0e34d6;
@@ -240,7 +242,7 @@ button.theme-toggle {
   color: var(--theme-text-secondary);
   font: inherit;
   cursor: pointer;
-  transition: transform .22s, border-color .22s, background-color .22s, box-shadow .22s;
+  transition: transform .22s, color .22s, border-color .22s, background-color .22s, box-shadow .22s;
 }
 button.theme-toggle:hover { transform: translateY(-1px); border-color: var(--theme-line-strong); }
 
@@ -264,7 +266,7 @@ button.theme-toggle:hover { transform: translateY(-1px); border-color: var(--the
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  transition: transform .22s, border-color .22s, background-color .22s, box-shadow .22s;
+  transition: transform .22s, color .22s, border-color .22s, background-color .22s, box-shadow .22s;
 }
 .mode-tab:hover { transform: translateY(-1px); box-shadow: 0 10px 24px #0f172a0d; }
 .mode-tab.is-active {
@@ -364,7 +366,7 @@ button.theme-toggle:hover { transform: translateY(-1px); border-color: var(--the
   font-size: 11px;
   color: var(--theme-text-secondary);
   cursor: pointer;
-  transition: transform .22s, border-color .22s, background-color .22s, box-shadow .22s;
+  transition: transform .22s, color .22s, border-color .22s, background-color .22s, box-shadow .22s;
 }
 .job-chip:hover { transform: translateY(-1px); box-shadow: 0 10px 24px #0f172a0d; }
 .job-chip.is-current { border-color: var(--lavender); box-shadow: inset 0 0 0 1px #bdbbff33; }
@@ -459,7 +461,7 @@ button.theme-toggle:hover { transform: translateY(-1px); border-color: var(--the
   font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
-  transition: transform .22s, border-color .22s, background-color .22s, box-shadow .22s;
+  transition: transform .22s, color .22s, border-color .22s, background-color .22s, box-shadow .22s;
 }
 .segmented button:hover { transform: translateY(-1px); }
 .segmented button.is-active {
@@ -483,6 +485,8 @@ button.theme-toggle:hover { transform: translateY(-1px); border-color: var(--the
   transition: border-color .22s, box-shadow .22s;
 }
 .composer:focus { border-color: var(--lavender); }
+/* composer 两主题恒白(官方对比面板设计),占位符用固定石板灰,不随主题翻成白字 */
+.composer::placeholder { color: #94a3b8; }
 
 /* ===== 通用输入(主题 token 面)===== */
 .input, select.input, textarea.input {
@@ -557,7 +561,7 @@ button.primary-btn {
   font-weight: 800;
   letter-spacing: .02em;
   cursor: pointer;
-  transition: transform .22s, border-color .22s, background-color .22s, box-shadow .22s;
+  transition: transform .22s, color .22s, border-color .22s, background-color .22s, box-shadow .22s;
 }
 button.primary-btn:hover:not(:disabled) {
   background: var(--theme-action-hover-bg);
