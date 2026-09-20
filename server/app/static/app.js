@@ -839,6 +839,172 @@
         }));
       });
     }
+    renderReports(job);
+  }
+
+  /* ---------- 报告渲染（如实交付：passed:false 显式呈现为「未通过」，禁绿勾粉饰）---------- */
+  function badge(passed, passText, failText) {
+    return h("span", {
+      class: "report-badge " + (passed ? "pass" : "fail"),
+      text: passed ? (passText || "通过") : (failText || "未通过")
+    });
+  }
+  function reportRow(key, value, fail) {
+    return h("div", { class: "report-row" }, [
+      h("span", { class: "report-key", text: key }),
+      h("span", { class: "report-value" + (fail ? " is-fail" : ""), text: String(value) })
+    ]);
+  }
+  function reportCard(title, badgeNode, cls) {
+    var head = h("div", { class: "report-head" }, [
+      h("span", { class: "report-title", text: title }),
+      badgeNode
+    ]);
+    return h("div", { class: "report-card glass-panel-soft" + (cls ? " " + cls : "") }, [head]);
+  }
+
+  /* 检缝报告（纹理线）：双轴跳变 <6 视为无缝；不过不判 failed，指标如实交付 */
+  function seamCard(report) {
+    var card = reportCard("检缝报告", badge(report.passed));
+    var body = h("div", { class: "report-body" });
+    body.appendChild(reportRow("水平接缝最大跳变", report.horizontal_max_step, !report.passed));
+    body.appendChild(reportRow("垂直接缝最大跳变", report.vertical_max_step, !report.passed));
+    body.appendChild(reportRow("无缝阈值", "< 6"));
+    if (!report.passed) {
+      body.appendChild(h("p", { class: "panel-note",
+        text: "接缝未抹平（常见于高频纹理）：数值如实呈现，是否重生成由你决定。" }));
+    }
+    card.appendChild(body);
+    return card;
+  }
+
+  /* 质量门禁报告（UI 线）：巨型粘连 / bbox 重叠逐项显式呈现 */
+  function gateCard(gate) {
+    var card = reportCard("质量门禁", badge(gate.passed));
+    var body = h("div", { class: "report-body" });
+    body.appendChild(reportRow("组件数", gate.component_count, !gate.passed));
+    (gate.giant_components || []).forEach(function (label) {
+      body.appendChild(reportRow("巨型粘连（面积占比超阈值）", label, true));
+    });
+    (gate.overlaps || []).forEach(function (ov) {
+      body.appendChild(reportRow("bbox 重叠", ov.a_label + " ↔ " + ov.b_label + "（占比 " + ov.ratio + "）", true));
+    });
+    if (!gate.passed) {
+      body.appendChild(h("p", { class: "panel-note",
+        text: "门禁未通过（多为生成图杂色背景导致粘连）：指标如实呈现，是否重生成由你决定。" }));
+    }
+    card.appendChild(body);
+    return card;
+  }
+
+  /* components.json 表格：label/bbox/area_px（extract 线另有 source_index/source_bbox）*/
+  function componentsTable(manifest, jobId) {
+    var wrap = h("div", { class: "report-card glass-panel-soft" });
+    wrap.appendChild(h("div", { class: "report-head" }, [
+      h("span", { class: "report-title", text: "组件分割数据" }),
+      h("span", { class: "report-key", text: "聚合表实际尺寸 " + manifest.actual_size.join("×") })
+    ]));
+    var hasSource = (manifest.components || []).some(function (c) {
+      return c.source_index !== undefined && c.source_index !== null;
+    });
+    var table = h("table", { class: "components-table" });
+    table.appendChild(h("thead", null, [h("tr", null, (hasSource
+      ? ["label", "bbox [x,y,w,h]", "area_px", "src#", "src bbox"]
+      : ["label", "bbox [x,y,w,h]", "area_px"]
+    ).map(function (t) { return h("th", { text: t }); }))]));
+    var tbody = h("tbody");
+    (manifest.components || []).forEach(function (c) {
+      var cells = [
+        h("td", { class: "num", text: c.label }),
+        h("td", { class: "num", text: "[" + c.bbox.join(", ") + "]" }),
+        h("td", { class: "num", text: c.area_px })
+      ];
+      if (hasSource) {
+        cells.push(h("td", { class: "num", text: c.source_index !== undefined && c.source_index !== null ? c.source_index : "—" }));
+        cells.push(h("td", { class: "num", text: c.source_bbox ? "[" + c.source_bbox.join(", ") + "]" : "—" }));
+      }
+      tbody.appendChild(h("tr", null, cells));
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(h("div", { class: "table-wrap" }, [table]));
+    if (jobId) {
+      wrap.appendChild(h("a", {
+        class: "inline-action", style: "margin-top:8px",
+        href: artifactUrl(jobId, "components.json"),
+        download: "components.json",
+        text: "下载 components.json（原始 JSON）"
+      }));
+    }
+    return wrap;
+  }
+
+  /* 打包报告（帧序列线）：loop_report 如实 + sheet_meta（spritesheet 线）*/
+  function loopRows(body, loop) {
+    body.appendChild(reportRow("首末帧最大通道跳变", loop.first_last_max_step, !loop.passed));
+    body.appendChild(reportRow("循环阈值", "< 6"));
+    if (!loop.passed) {
+      body.appendChild(h("p", { class: "panel-note",
+        text: "循环检未闭合：数值如实呈现（生成线逐帧文生图的帧间一致性是已知局限），是否重生成由你决定。" }));
+    }
+  }
+  function sheetRows(body, meta) {
+    if (!meta) return;
+    body.appendChild(reportRow("网格（列×行）", meta.columns + " × " + meta.rows));
+    body.appendChild(reportRow("单帧尺寸", meta.frame_size.join("×")));
+    body.appendChild(reportRow("循环播放", meta.loop ? "是" : "否"));
+  }
+  function animPackCard(report) {
+    var card = reportCard("打包报告", badge(report.loop_report.passed));
+    var body = h("div", { class: "report-body" });
+    body.appendChild(reportRow("帧数 / 帧尺寸", report.frame_count + " × " + report.frame_size.join("×")));
+    body.appendChild(reportRow("帧时长", report.duration_ms + " ms"));
+    body.appendChild(reportRow("动作类型 / 交付", report.animation_type + " / " + (report.alpha_mode || "—") +
+      (report.pixel ? " / pixel" : "")));
+    loopRows(body, report.loop_report);
+    if (report.sheet_meta) {
+      body.appendChild(h("hr", { class: "divider" }));
+      body.appendChild(reportRow("spritesheet 元数据", "cols " + report.sheet_meta.columns + " / rows " + report.sheet_meta.rows +
+        " / frame " + report.sheet_meta.frame_size.join("×")));
+    }
+    card.appendChild(body);
+    return card;
+  }
+
+  /* 生成报告（animate 线）：seeds 序列 + 逐帧 prompt 折叠详情 + 内嵌打包报告 */
+  function animateCard(report, jobId) {
+    var card = reportCard("生成报告", badge(report.pack.loop_report.passed, "循环通过", "循环未闭合"));
+    var body = h("div", { class: "report-body" });
+    body.appendChild(reportRow("帧数 / 尺寸", report.frame_count + " × " + report.size.join("×")));
+    body.appendChild(reportRow("seeds", report.seeds.join(", ")));
+    body.appendChild(reportRow("动作类型", report.animation_type + (report.pixel ? " / pixel" : "") +
+      " / alpha " + (report.alpha_mode || "—")));
+    if (report.frame_prompts && report.frame_prompts.length) {
+      var acc = h("details", { class: "acc" }, [
+        h("summary", { text: "逐帧 prompt（" + report.frame_prompts.length + " 条，点击展开）" })
+      ]);
+      var accBody = h("div", { class: "acc-body" });
+      report.frame_prompts.forEach(function (p, i) {
+        accBody.appendChild(h("pre", { text: "frame " + i + ": " + p }));
+      });
+      acc.appendChild(accBody);
+      body.appendChild(acc);
+    }
+    loopRows(body, report.pack.loop_report);
+    if (report.pack.sheet_meta) sheetRows(body, report.pack.sheet_meta);
+    card.appendChild(body);
+    return card;
+  }
+
+  function renderReports(job) {
+    var stack = h("div", { class: "report-stack" });
+    if (job.seam_report) stack.appendChild(seamCard(job.seam_report));
+    if (job.ui_components) {
+      stack.appendChild(gateCard(job.ui_components.gate));
+      stack.appendChild(componentsTable(job.ui_components, job.job_id));
+    }
+    if (job.anim_report) stack.appendChild(animPackCard(job.anim_report));
+    if (job.animate_report) stack.appendChild(animateCard(job.animate_report, job.job_id));
+    if (stack.childElementCount) els.result.appendChild(stack);
   }
 
   /* ---------- 会话任务列表（本轮内存态；跨会话历史待 GET /api/v1/jobs 后再做） ---------- */
