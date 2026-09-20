@@ -1,9 +1,9 @@
 /* red-art-studio 工作台逻辑（vanilla，无框架无构建，离线可用）。
    架构（任务书 §5 定稿）：一张路由表 {mode: {submit, status, transport}}
-   驱动全部模式——表单字段由 FIELDS 配置生成、提交按 transport 组包、轮询
-   沿用 2s 间隔、产物经 /api/v1/artifacts 渲染；不做 8 份重复轮询代码。
-   字段取值域的唯一真源是 server/app/jobs/models.py，本文件是其展示层投影，
-   改契约需同步（不做运行时 schema 拉取，保持零后端改动）。
+   驱动全部八条能力线——表单字段由 FIELDS 配置生成、提交按 transport 组包、
+   轮询沿用 2s 间隔、产物经 /api/v1/artifacts 渲染；不做 8 份重复轮询代码。
+   字段与取值域的唯一真源是 server/app/jobs/models.py，本文件是其展示层投影
+   （改契约需同步；不做运行时 schema 拉取，保持零后端改动）。
    铁律：前端只做展示与参数表单，不做图像处理；零外链资源。 */
 
 (function () {
@@ -17,6 +17,8 @@
     );
   } catch (err) { BOOTSTRAP = {}; }
 
+  var MAX_UPLOAD_BYTES = 20 * 1024 * 1024; // 服务端 settings.max_upload_bytes 缺省值
+
   /* ---------- 路由表：submit/status 前缀每线不同（ui_gen 双模式同前缀、
      animations 与 animate 是两个前缀），逐线显式声明 ---------- */
   var ROUTES = {
@@ -28,6 +30,17 @@
     ui_extract: { submit: "/api/v1/ui_gen/extract", status: "/api/v1/ui_gen", transport: "multipart" },
     anim_pack: { submit: "/api/v1/animations", status: "/api/v1/animations", transport: "multipart" },
     animate: { submit: "/api/v1/animate", status: "/api/v1/animate", transport: "json" }
+  };
+
+  /* ---------- 上传槽位（multipart 线；张数门禁与 wire 字段名逐线对应）---------- */
+  var FILE_SPECS = {
+    image_edit: [{ key: "file", label: "待处理图片", min: 1, max: 1, hint: "PNG/JPEG/WebP，≤20MB" }],
+    tileset: [
+      { key: "background", label: "背景纹理", min: 1, max: 1, hint: "必须 64×64，PNG/JPEG/WebP" },
+      { key: "foreground", label: "前景纹理", min: 1, max: 1, hint: "必须 64×64，PNG/JPEG/WebP" }
+    ],
+    ui_extract: [{ key: "files", label: "参考图", min: 1, max: 8, hint: "1-8 张，PNG/JPEG/WebP，≤20MB/张" }],
+    anim_pack: [{ key: "files", label: "静帧序列", min: 2, max: 16, even: true, hint: "2-16 张且偶数、等尺寸；动画格式（多帧 WebP/GIF）会被拒绝" }]
   };
 
   /* ---------- 模式分组：五个导航入口，组内二级分段 ---------- */
@@ -50,10 +63,13 @@
     animate: "精灵动画生成"
   };
 
+  var ANIM_TYPES = ["idle", "walk", "run", "jump", "attack", "hit", "defeated", "other"];
+  var BG_COLORS = ["#000000", "#ffffff", "#cccccc", "#808080", "#333333"];
+
   /* ---------- 表单字段配置（取值域见 jobs/models.py）----------
      type: composer 提示词 | segmented 枚举 | number | toggle | swatches
-     五枚举底色 | provider 服务端注入下拉 | files 上传（路由表定义张数域）
-     showIf: 动态字段区（如 color_count 仅 pixel=true；后处理按 operation）。 */
+     五枚举底色 | text 自由文本 | note 说明行 | provider 服务端注入下拉
+     showIf: 动态字段区（color_count 仅 pixel=true；后处理按 operation 切换）。 */
   var FIELDS = {
     generation: [
       { key: "prompt", type: "composer", label: "提示词（prompt）", required: true,
@@ -62,7 +78,215 @@
       { key: "height", type: "number", label: "高（px）", min: 64, max: 2048, value: 512 },
       { key: "n", type: "number", label: "张数", min: 1, max: 10, value: 1 },
       { key: "provider", type: "provider", label: "推理后端" }
+    ],
+
+    image_edit: [
+      { key: "operation", type: "segmented", label: "操作", required: true, value: "pixelate",
+        options: ["pixelate", "remove_background", "self_loop"] },
+      { key: "pixel_size", type: "number", label: "像素粒度（4-64）", min: 4, max: 64,
+        showIf: function (v) { return v.operation === "pixelate"; },
+        hint: "留空 = 自动估计粒度" },
+      { key: "source_background_color", type: "text", label: "源底色（#RRGGBB）",
+        placeholder: "#RRGGBB，留空 = 四角扫描",
+        showIf: function (v) { return v.operation === "remove_background"; } },
+      { key: "tolerance", type: "number", label: "色距阈值（0-255）", min: 0, max: 255,
+        showIf: function (v) { return v.operation === "remove_background"; },
+        hint: "留空 = 32（缺省）" },
+      { key: "direction", type: "segmented", label: "无缝化方向（必填）", required: true,
+        options: ["horizontal", "vertical", "four_way"],
+        showIf: function (v) { return v.operation === "self_loop"; } }
+    ],
+
+    texture: [
+      { key: "prompt", type: "composer", label: "提示词（prompt）", required: true,
+        placeholder: "例：seamless pixel art grass texture, top down" },
+      { key: "quantize", type: "toggle", label: "调色板量化（≤32 色）" },
+      { key: "isometric", type: "toggle", label: "等距投影（64×64 → 128×64 瓦片）" }
+    ],
+
+    tileset: [
+      { key: "terrain_mode", type: "segmented", label: "地形模式", required: true, value: "dual",
+        options: ["dual", "foreground", "background"] },
+      { type: "note", text: "dual：两张纹理都参与合成（B 覆盖 A）。",
+        showIf: function (v) { return v.terrain_mode === "dual"; } },
+      { type: "note", text: "foreground：本次只消费前景纹理（背景纹理仅过校验，不参与合成）。",
+        showIf: function (v) { return v.terrain_mode === "foreground"; } },
+      { type: "note", text: "background：本次只消费背景纹理（前景纹理仅过校验，不参与合成）。",
+        showIf: function (v) { return v.terrain_mode === "background"; } },
+      { key: "seed", type: "number", label: "噪声种子（0-2^31-1）", min: 0, max: 2147483647, value: 0,
+        hint: "同 seed 同输出" },
+      { key: "feather_width", type: "number", label: "边缘羽化（0.5-8 px）", min: 0.5, max: 8, step: 0.5, value: 1 }
+    ],
+
+    ui_gen: [
+      { key: "prompt", type: "composer", label: "提示词（prompt）", required: true,
+        placeholder: "例：3x3 grid of fantasy RPG menu buttons, stone and gold" },
+      { key: "quality", type: "segmented", label: "质量档位", value: "detailed",
+        options: ["standard", "detailed", "ultimate"] },
+      { type: "note", text: "注意：quality 是契约面参数位，本地推理通道不消费该档位（不生效）。" },
+      { key: "resolution", type: "segmented", label: "分辨率档位", value: "2k", options: ["1k", "2k"] },
+      { key: "aspect_ratio", type: "segmented", label: "长宽比", value: "1:1",
+        options: ["4:3", "3:4", "16:9", "9:16", "1:1"] },
+      { key: "background_color", type: "swatches", label: "matte 底色", value: "#cccccc", options: BG_COLORS },
+      { key: "remove_background", type: "toggle", label: "色键去背", value: true },
+      { key: "split_components", type: "toggle", label: "组件分割数据", value: true }
+    ],
+
+    ui_extract: [
+      { key: "background_color", type: "swatches", label: "matte 底色", value: "", options: BG_COLORS,
+        optionalAuto: true, autoLabel: "自动扫描",
+        hint: "留空（自动扫描）= 逐图四角取众数为底色" }
+    ],
+
+    anim_pack: [
+      { key: "animation_type", type: "segmented", label: "动作类型", value: "other", options: ANIM_TYPES },
+      { key: "output_format", type: "segmented", label: "交付格式", value: "webp",
+        options: ["webp", "gif", "spritesheet"] },
+      { key: "pixel", type: "toggle", label: "像素纪律（alpha 路由 + 调色板统一 + 画布 ≤256）" },
+      { key: "alpha_mode", type: "segmented", label: "alpha 处理", value: "", options: ["soft", "sharp"],
+        optionalAuto: true, autoLabel: "自动（按像素纪律路由）" },
+      { key: "color_count", type: "number", label: "统一调色板色数（2-64）", min: 2, max: 64,
+        clearWhenHidden: true,
+        showIf: function (v) { return v.pixel === true; },
+        hint: "仅 pixel=true 时合法携带（缺省 32）" },
+      { key: "duration_ms", type: "number", label: "帧时长（20-1000 ms）", min: 20, max: 1000, value: 125 }
+    ],
+
+    animate: [
+      { key: "prompt", type: "composer", label: "动作描述（prompt，1-500 字符）", required: true,
+        placeholder: "例：a small red pixel art ball bouncing" },
+      { key: "animation_type", type: "segmented", label: "动作类型", value: "other", options: ANIM_TYPES },
+      { key: "frame_count", type: "number", label: "帧数（4-16 且偶数）", min: 4, max: 16, value: 8 },
+      { key: "width", type: "number", label: "宽（px）", min: 64, max: 2048, value: 512 },
+      { key: "height", type: "number", label: "高（px）", min: 64, max: 2048, value: 512 },
+      { key: "output_format", type: "segmented", label: "交付格式", value: "webp",
+        options: ["webp", "gif", "spritesheet"] },
+      { key: "pixel", type: "toggle", label: "像素纪律（画布任一轴 ≤256）" },
+      { key: "alpha_mode", type: "segmented", label: "alpha 处理", value: "", options: ["soft", "sharp"],
+        optionalAuto: true, autoLabel: "自动（按像素纪律路由）" },
+      { key: "color_count", type: "number", label: "统一调色板色数（2-64）", min: 2, max: 64,
+        clearWhenHidden: true,
+        showIf: function (v) { return v.pixel === true; },
+        hint: "仅 pixel=true 时合法携带（缺省 32）" },
+      { key: "duration_ms", type: "number", label: "帧时长（20-1000 ms）", min: 20, max: 1000, value: 125 },
+      { key: "seed", type: "number", label: "随机种子（≥0）", min: 0, value: 0,
+        hint: "同 seed 同 prompt 可复现；逐帧 seed=seed+i" }
     ]
+  };
+
+  /* ---------- 组包器（wire 形态逐线对应契约；image_edit 是嵌套形态）---------- */
+  function num(v, fallback) {
+    return v === undefined || v === "" || v === null ? fallback : parseFloat(v);
+  }
+  function intOrNull(v) {
+    return v === undefined || v === "" || v === null ? null : parseInt(v, 10);
+  }
+
+  var BUILDERS = {
+    generation: function (v) {
+      var out = {
+        prompt: String(v.prompt || "").trim(),
+        size: (intOrNull(v.width) || 512) + "x" + (intOrNull(v.height) || 512),
+        n: num(v.n, 1)
+      };
+      var provider = providerValue();
+      if (provider) out.provider = provider;
+      return out;
+    },
+    image_edit: function (v) {
+      var params = {};
+      if (v.operation === "pixelate") {
+        var px = intOrNull(v.pixel_size);
+        if (px !== null) params.pixel_size = px;
+      } else if (v.operation === "remove_background") {
+        if (v.source_background_color) params.source_background_color = v.source_background_color;
+        var tol = intOrNull(v.tolerance);
+        if (tol !== null) params.tolerance = tol;
+      } else if (v.operation === "self_loop") {
+        params.direction = v.direction; // 必填，VALIDATORS 已拦截缺失
+      }
+      return { operation: v.operation, params: params };
+    },
+    texture: function (v) {
+      return { prompt: String(v.prompt || "").trim(), quantize: v.quantize === true, isometric: v.isometric === true };
+    },
+    tileset: function (v) {
+      var out = { terrain_mode: v.terrain_mode };
+      var seed = intOrNull(v.seed);
+      if (seed !== null) out.seed = seed;
+      var fw = num(v.feather_width, null);
+      if (fw !== null) out.feather_width = fw;
+      return out;
+    },
+    ui_gen: function (v) {
+      return {
+        prompt: String(v.prompt || "").trim(),
+        quality: v.quality || "detailed",
+        resolution: v.resolution || "2k",
+        aspect_ratio: v.aspect_ratio || "1:1",
+        background_color: v.background_color || "#cccccc",
+        remove_background: v.remove_background !== false,
+        split_components: v.split_components !== false
+      };
+    },
+    ui_extract: function (v) {
+      var out = {};
+      if (v.background_color) out.background_color = v.background_color;
+      return out;
+    },
+    anim_pack: function (v) {
+      var out = {
+        animation_type: v.animation_type || "other",
+        output_format: v.output_format || "webp",
+        pixel: v.pixel === true,
+        duration_ms: num(v.duration_ms, 125)
+      };
+      if (v.alpha_mode) out.alpha_mode = v.alpha_mode;
+      var cc = intOrNull(v.color_count);
+      if (out.pixel && cc !== null) out.color_count = cc;
+      return out;
+    },
+    animate: function (v) {
+      var out = {
+        prompt: String(v.prompt || "").trim(),
+        animation_type: v.animation_type || "other",
+        frame_count: num(v.frame_count, 8),
+        size: (intOrNull(v.width) || 512) + "x" + (intOrNull(v.height) || 512),
+        output_format: v.output_format || "webp",
+        pixel: v.pixel === true,
+        duration_ms: num(v.duration_ms, 125),
+        seed: num(v.seed, 0)
+      };
+      if (v.alpha_mode) out.alpha_mode = v.alpha_mode;
+      var cc = intOrNull(v.color_count);
+      if (out.pixel && cc !== null) out.color_count = cc;
+      return out;
+    }
+  };
+
+  /* ---------- 客户端预校验（服务端 422 兜底前的第一道；消息与服务端门禁同语义）---------- */
+  var HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+  var VALIDATORS = {
+    image_edit: function (v) {
+      if (v.source_background_color && !HEX_COLOR.test(v.source_background_color)) {
+        return "源底色需为 #RRGGBB 形态（如 #cccccc）";
+      }
+      return null;
+    },
+    animate: function (v) {
+      var prompt = String(v.prompt || "").trim();
+      if (!prompt) return "动作描述不能为空";
+      if (prompt.length > 500) return "动作描述最长 500 字符，实际 " + prompt.length;
+      var fc = num(v.frame_count, 8);
+      if (fc % 2 !== 0) return "帧数必须为偶数（官方约束），实际 " + fc;
+      if (v.pixel === true) {
+        var w = intOrNull(v.width) || 512, hgt = intOrNull(v.height) || 512;
+        if (Math.max(w, hgt) > 256) {
+          return "像素动画画布任一轴不得超过 256px，实际 " + w + "x" + hgt;
+        }
+      }
+      return null;
+    }
   };
 
   /* ---------- 全局状态 ---------- */
@@ -70,7 +294,7 @@
     group: "image",
     mode: "generation",
     values: {},        // 各模式当前表单值 {mode: {key: value}}
-    files: {},         // 各模式已选文件 {mode: [File,...]}
+    files: {},         // 各模式已选文件 {mode: {slotKey: [File,...]}}
     history: [],       // 会话内任务 {jobId, mode, status, data}
     pollTimer: null,
     busy: false
@@ -87,7 +311,7 @@
         if (k === "class") node.className = attrs[k];
         else if (k === "text") node.textContent = attrs[k];
         else if (k.slice(0, 2) === "on") node.addEventListener(k.slice(2), attrs[k]);
-        else node.setAttribute(k, attrs[k]);
+        else if (attrs[k] !== undefined && attrs[k] !== null) node.setAttribute(k, attrs[k]);
       });
     }
     (children || []).forEach(function (c) { if (c) node.appendChild(c); });
@@ -116,12 +340,21 @@
     if (kind) dot.classList.add("is-" + kind);
   }
 
-  /* ---------- 表单渲染（FIELDS 配置 → 面板 DOM） ---------- */
+  /* ---------- 表单值存取 ---------- */
   function modeValues(mode) {
     if (!state.values[mode]) state.values[mode] = {};
     return state.values[mode];
   }
+  function modeFiles(mode) {
+    if (!state.files[mode]) state.files[mode] = {};
+    return state.files[mode];
+  }
+  function providerValue() {
+    var select = els.panel.querySelector("select[data-provider]");
+    return select ? select.value : "";
+  }
 
+  /* ---------- 面板渲染（FIELDS/FILE_SPECS 配置 → 面板 DOM） ---------- */
   function renderPanel() {
     var panel = els.panel;
     panel.innerHTML = "";
@@ -145,63 +378,79 @@
     }
 
     var form = h("form", { id: "job-form", novalidate: "novalidate" });
-    var fields = FIELDS[state.mode];
-    if (!fields) {
-      form.appendChild(h("div", {
-        class: "panel-note",
-        text: "该模式表单在下一段提交接入（本轮先交付视觉骨架与文生图线）。"
-      }));
-      panel.appendChild(form);
-      return;
-    }
-    fields.forEach(function (spec) {
-      if (spec.showIf && !spec.showIf(modeValues(state.mode))) return;
-      form.appendChild(renderField(spec));
+    var fields = FIELDS[state.mode] || [];
+    fields.forEach(function (spec, i) {
+      form.appendChild(renderField(spec, i));
+    });
+    // 上传槽位（multipart 线）
+    (FILE_SPECS[state.mode] || []).forEach(function (spec) {
+      form.appendChild(renderFileField(spec));
     });
 
-    var section = h("section", null, [
+    form.appendChild(h("section", null, [
       h("button", {
         id: "submit-btn", class: "primary-btn", type: "submit",
-        text: state.busy ? "提交中…" : "生成"
+        text: state.busy ? "提交中…" : submitLabel(state.mode)
       }),
       h("div", { id: "status-line", class: "status-line", role: "status" }),
       h("div", { id: "error-line", class: "error-line", role: "alert" })
-    ]);
-    form.appendChild(section);
+    ]));
     form.addEventListener("submit", onSubmit);
     panel.appendChild(form);
     refreshVisibility();
   }
 
-  function renderField(spec) {
-    var wrap = h("div", { class: "field", "data-field": spec.key });
+  function submitLabel(mode) {
+    if (mode === "image_edit") return "开始处理";
+    if (mode === "tileset") return "合成图集";
+    if (mode === "ui_extract") return "提取重排";
+    if (mode === "anim_pack") return "打包";
+    if (mode === "animate") return "生成动画";
+    if (mode === "texture") return "生成纹理";
+    if (mode === "ui_gen") return "生成 UI";
+    return "生成";
+  }
+
+  function fieldId(spec, index) {
+    return spec.key || "note-" + index; // note 行无键，按位置唯一化
+  }
+
+  function renderField(spec, index) {
+    var wrap = h("div", { class: "field", "data-field": fieldId(spec, index) });
     var vals = modeValues(state.mode);
 
+    if (spec.type === "note") {
+      wrap.appendChild(h("p", { class: "panel-note", text: spec.text }));
+      return wrap;
+    }
     if (spec.type !== "toggle" && spec.label) {
       wrap.appendChild(h("label", { class: "field-label", text: spec.label }));
     }
     switch (spec.type) {
-      case "composer":
+      case "composer": {
         var ta = h("textarea", { class: "composer", rows: "3", placeholder: spec.placeholder || "" });
         ta.value = vals[spec.key] || "";
         ta.addEventListener("input", function () { vals[spec.key] = ta.value; });
         wrap.appendChild(ta);
         break;
+      }
       case "segmented": {
+        if (vals[spec.key] === undefined) vals[spec.key] = spec.value !== undefined ? spec.value : "";
+        var options = spec.options.slice();
+        if (spec.optionalAuto) options.unshift("");
         var seg = h("div", { class: "segmented", role: "radiogroup" });
-        var current = vals[spec.key] !== undefined ? vals[spec.key] : spec.value;
-        vals[spec.key] = current;
-        spec.options.forEach(function (opt) {
+        options.forEach(function (opt) {
+          var label = opt === "" ? (spec.autoLabel || "自动") : opt;
           seg.appendChild(h("button", {
             type: "button",
             class: vals[spec.key] === opt ? "is-active" : "",
-            text: opt,
+            text: label,
             onclick: function () {
               vals[spec.key] = opt;
-              Array.prototype.forEach.call(seg.children, function (b) {
-                b.classList.toggle("is-active", b.textContent === opt);
+              Array.prototype.forEach.call(seg.children, function (b, i) {
+                b.classList.toggle("is-active", options[i] === opt);
               });
-              refreshVisibility();
+              refreshVisibility(); // operation 等枚举驱动动态字段区
             }
           }));
         });
@@ -209,17 +458,27 @@
         break;
       }
       case "number": {
-        var input = h("input", { class: "input", type: "number", min: spec.min, max: spec.max });
-        input.value = vals[spec.key] !== undefined ? vals[spec.key] : spec.value;
+        if (vals[spec.key] === undefined && spec.value !== undefined) vals[spec.key] = spec.value;
+        var input = h("input", { class: "input", type: "number", min: spec.min, max: spec.max,
+          step: spec.step !== undefined ? spec.step : "1" });
+        input.value = vals[spec.key] !== undefined ? vals[spec.key] : "";
         input.addEventListener("input", function () { vals[spec.key] = input.value; });
         wrap.appendChild(input);
         break;
       }
+      case "text": {
+        var text = h("input", { class: "input", type: "text", placeholder: spec.placeholder || "" });
+        text.value = vals[spec.key] || "";
+        text.addEventListener("input", function () { vals[spec.key] = text.value.trim(); });
+        wrap.appendChild(text);
+        break;
+      }
       case "toggle": {
+        if (vals[spec.key] === undefined && spec.value !== undefined) vals[spec.key] = spec.value;
         var row = h("div", { class: "toggle-row" });
         if (spec.label) row.appendChild(h("span", { class: "field-label", text: spec.label }));
         var cb = h("input", { class: "toggle", type: "checkbox" });
-        cb.checked = vals[spec.key] !== undefined ? !!vals[spec.key] : !!spec.value;
+        cb.checked = vals[spec.key] === true;
         cb.addEventListener("change", function () {
           vals[spec.key] = cb.checked;
           refreshVisibility();
@@ -229,10 +488,27 @@
         break;
       }
       case "swatches": {
+        if (vals[spec.key] === undefined) vals[spec.key] = spec.value !== undefined ? spec.value : "";
+        var options2 = spec.options.slice();
+        if (spec.optionalAuto) options2.unshift("");
         var rowSw = h("div", { class: "swatch-row", role: "radiogroup" });
-        var cur = vals[spec.key] !== undefined ? vals[spec.key] : spec.value;
-        vals[spec.key] = cur;
-        spec.options.forEach(function (color) {
+        options2.forEach(function (color) {
+          if (color === "") {
+            var auto = h("button", {
+              type: "button",
+              class: "inline-action" + (vals[spec.key] === "" ? " is-active" : ""),
+              text: spec.autoLabel || "自动",
+              style: "min-height:32px"
+            });
+            auto.addEventListener("click", function () {
+              vals[spec.key] = "";
+              Array.prototype.forEach.call(rowSw.children, function (s, i) {
+                s.classList.toggle("is-active", options2[i] === "");
+              });
+            });
+            rowSw.appendChild(auto);
+            return;
+          }
           var b = h("button", {
             type: "button", class: "swatch" + (vals[spec.key] === color ? " is-active" : ""),
             "aria-label": color, title: color
@@ -240,45 +516,150 @@
           b.style.background = color;
           b.addEventListener("click", function () {
             vals[spec.key] = color;
-            Array.prototype.forEach.call(rowSw.children, function (s) {
-              s.classList.toggle("is-active", s.getAttribute("aria-label") === color);
+            Array.prototype.forEach.call(rowSw.children, function (s, i) {
+              s.classList.toggle("is-active", options2[i] === color);
             });
           });
           rowSw.appendChild(b);
         });
         wrap.appendChild(rowSw);
-        if (spec.hint) wrap.appendChild(h("p", { class: "panel-note", text: spec.hint }));
         break;
       }
       case "provider": {
-        var select = h("select", { class: "input" });
-        var opts = (BOOTSTRAP.provider_options || []);
-        opts.forEach(function (o) {
+        var select = h("select", { class: "input", "data-provider": "1" });
+        (BOOTSTRAP.provider_options || []).forEach(function (o) {
           var opt = h("option", { value: o.value, text: o.label });
           if (o.selected) opt.selected = true;
           select.appendChild(opt);
         });
-        select.value = vals[spec.key] || (function () {
-          var d = opts.filter(function (o) { return o.selected; })[0];
-          return d ? d.value : "";
-        })();
-        select.addEventListener("change", function () { vals[spec.key] = select.value; });
         wrap.appendChild(select);
         break;
       }
       default:
         break;
     }
+    if (spec.hint) wrap.appendChild(h("p", { class: "panel-note", text: spec.hint }));
     return wrap;
   }
 
-  /* showIf 依赖值变化后重算各字段可见性（color_count / 后处理参数区等） */
+  /* ---------- 上传槽位（dropzone + 缩略图 + 计数 + 上下限预校验）---------- */
+  function renderFileField(spec) {
+    var wrap = h("div", { class: "field", "data-field": "file-" + spec.key });
+    var labelRow = h("div", { class: "toggle-row" });
+    labelRow.appendChild(h("label", { class: "field-label", text: spec.label }));
+    var badge = h("span", { class: "count-badge", "data-count": spec.key, text: "0/" + spec.max });
+    labelRow.appendChild(badge);
+    wrap.appendChild(labelRow);
+
+    var zone = h("div", { class: "dropzone", text: "点击选择或拖入文件到此处" });
+    if (spec.hint) zone.appendChild(h("span", { class: "panel-note", text: spec.hint }));
+    var input = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp",
+      multiple: spec.max > 1 ? "multiple" : null, style: "display:none" });
+
+    zone.addEventListener("click", function () { input.click(); });
+    zone.addEventListener("dragover", function (e) {
+      e.preventDefault();
+      zone.classList.add("is-over");
+    });
+    zone.addEventListener("dragleave", function () { zone.classList.remove("is-over"); });
+    zone.addEventListener("drop", function (e) {
+      e.preventDefault();
+      zone.classList.remove("is-over");
+      addFiles(spec, Array.prototype.slice.call(e.dataTransfer.files));
+    });
+    input.addEventListener("change", function () {
+      addFiles(spec, Array.prototype.slice.call(input.files));
+      input.value = "";
+    });
+
+    wrap.appendChild(zone);
+    wrap.appendChild(input);
+    wrap.appendChild(h("div", { class: "thumb-grid", "data-thumbs": spec.key }));
+    renderThumbs(spec);
+    return wrap;
+  }
+
+  function addFiles(spec, incoming) {
+    var bucket = modeFiles(state.mode);
+    var list = bucket[spec.key] || (bucket[spec.key] = []);
+    var rejected = [];
+    incoming.forEach(function (f) {
+      if (spec.max === 1) { list.length = 0; }
+      if (list.length >= spec.max) { rejected.push("超过上限 " + spec.max + " 张"); return; }
+      if (f.size > MAX_UPLOAD_BYTES) { rejected.push(f.name + " 超过 20MB"); return; }
+      list.push(f);
+    });
+    if (rejected.length) formError(rejected[0]);
+    renderThumbs(spec);
+    updateFileBadge(spec);
+  }
+
+  function removeFile(spec, index) {
+    var list = modeFiles(state.mode)[spec.key] || [];
+    list.splice(index, 1);
+    renderThumbs(spec);
+    updateFileBadge(spec);
+  }
+
+  function renderThumbs(spec) {
+    var grid = els.panel.querySelector('[data-thumbs="' + spec.key + '"]');
+    if (!grid) return;
+    grid.innerHTML = "";
+    var list = modeFiles(state.mode)[spec.key] || [];
+    list.forEach(function (f, i) {
+      var url = URL.createObjectURL(f);
+      var cell = h("div", { class: "thumb" });
+      var img = h("img", { alt: f.name, src: url });
+      img.addEventListener("load", function () { URL.revokeObjectURL(url); });
+      cell.appendChild(img);
+      cell.appendChild(h("button", {
+        type: "button", "aria-label": "移除 " + f.name, text: "×",
+        onclick: function () { removeFile(spec, i); }
+      }));
+      grid.appendChild(cell);
+    });
+  }
+
+  function fileCountValid(spec, count) {
+    if (count < spec.min) return false;
+    if (count > spec.max) return false;
+    if (spec.even && count % 2 !== 0) return false;
+    return true;
+  }
+
+  function updateFileBadge(spec) {
+    var badge = els.panel.querySelector('[data-count="' + spec.key + '"]');
+    if (!badge) return;
+    var list = modeFiles(state.mode)[spec.key] || [];
+    badge.textContent = list.length + "/" + spec.max;
+    badge.classList.toggle("is-invalid", !fileCountValid(spec, list.length));
+  }
+
+  function validateFiles() {
+    var specs = FILE_SPECS[state.mode] || [];
+    for (var i = 0; i < specs.length; i++) {
+      var spec = specs[i];
+      var list = modeFiles(state.mode)[spec.key] || [];
+      if (list.length < spec.min) {
+        return spec.label + "至少需要 " + spec.min + " 张，实际 " + list.length + " 张";
+      }
+      if (list.length > spec.max) {
+        return spec.label + "最多 " + spec.max + " 张，实际 " + list.length + " 张";
+      }
+      if (spec.even && list.length % 2 !== 0) {
+        return "帧数必须为偶数（官方约束），实际 " + list.length + " 张";
+      }
+    }
+    return null;
+  }
+
+  /* ---------- showIf 可见性重算 ---------- */
   function refreshVisibility() {
     var form = $("job-form");
     if (!form) return;
     var vals = modeValues(state.mode);
-    (FIELDS[state.mode] || []).forEach(function (spec) {
-      var node = form.querySelector('[data-field="' + spec.key + '"]');
+    (FIELDS[state.mode] || []).forEach(function (spec, i) {
+      var node = form.querySelector('[data-field="' + fieldId(spec, i) + '"]');
       if (!node) return;
       var visible = !spec.showIf || spec.showIf(vals);
       node.style.display = visible ? "" : "none";
@@ -300,8 +681,8 @@
   function setBusy(busy) {
     state.busy = busy;
     var btn = $("submit-btn");
-    if (btn) { btn.disabled = busy; btn.textContent = busy ? "提交中…" : "生成"; }
-    if (!busy && els.status) setStatus("就绪", null);
+    if (btn) { btn.disabled = busy; btn.textContent = busy ? "提交中…" : submitLabel(state.mode); }
+    if (!busy && els.status && !els.status.classList.contains("is-error")) setStatus("就绪", null);
   }
 
   function formError(message) {
@@ -310,54 +691,39 @@
     if (els.status) setStatus("出错", "error");
   }
 
-  function collectValues() {
+  function validateForm() {
     var vals = modeValues(state.mode);
     var fields = FIELDS[state.mode] || [];
-    var out = {};
-    fields.forEach(function (spec) {
-      if (spec.type === "provider") return; // provider 由 select 单独取
-      var v = vals[spec.key];
-      if (spec.type === "number") {
-        if (v === undefined || v === "") return;
-        out[spec.key] = parseInt(v, 10);
-      } else if (v !== undefined && v !== "") {
-        out[spec.key] = v;
-      }
-    });
-    return out;
-  }
-
-  function validateRequired() {
-    var fields = FIELDS[state.mode] || [];
-    var vals = modeValues(state.mode);
     for (var i = 0; i < fields.length; i++) {
       var spec = fields[i];
       if (!spec.required) continue;
+      if (spec.showIf && !spec.showIf(vals)) continue;
       var v = vals[spec.key];
       if (v === undefined || v === null || String(v).trim() === "") {
         return (spec.label || spec.key) + " 不能为空";
       }
     }
-    return null;
+    var checker = VALIDATORS[state.mode];
+    var err = checker ? checker(vals) : null;
+    if (err) return err;
+    return validateFiles();
   }
 
   function onSubmit(event) {
     event.preventDefault();
     if (state.busy) return;
-    var missing = validateRequired();
-    if (missing) { formError(missing); return; }
+    var problem = validateForm();
+    if (problem) { formError(problem); return; }
     var errLine = $("error-line");
     if (errLine) errLine.textContent = "";
 
-    var payload = buildPayload(state.mode);
-    if (!payload) return; // buildPayload 内部已报错
-
+    var request = buildRequest(state.mode);
     setBusy(true);
     if (els.status) setStatus("提交中…", "busy");
     fetch(ROUTES[state.mode].submit, {
       method: "POST",
-      headers: payload.headers,
-      body: payload.body
+      headers: request.headers,
+      body: request.body
     }).then(function (resp) {
       return resp.json().then(function (data) {
         if (resp.status !== 202) {
@@ -367,52 +733,48 @@
       });
     }).then(function (data) {
       trackJob(data.job_id);
-      if (els.status) {
-        setStatus("任务已受理（job " + data.job_id.slice(0, 8) + "…），生成中…", "busy");
-      }
       var line = $("status-line");
       if (line) line.textContent = "任务已受理（job " + data.job_id.slice(0, 8) + "…），生成中…";
-      startPolling(data.job_id);
+      if (els.status) setStatus("生成中", "busy");
+      startPolling(data.job_id, ROUTES[state.mode].status);
     }).catch(function (err) {
       setBusy(false);
       formError("提交失败：" + err.message);
     });
   }
 
-  function buildPayload(mode) {
+  function buildRequest(mode) {
     var route = ROUTES[mode];
-    var values = collectValues();
+    var payload = BUILDERS[mode](modeValues(mode));
     if (route.transport === "json") {
-      return {
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values)
-      };
+      return { headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) };
     }
     var fd = new FormData();
-    fd.append("payload", JSON.stringify(values));
-    // 上传线（image_edits 单文件 / tilesets 双文件 / extract·animations 多文件）
-    var list = state.files[mode] || [];
-    if (mode === "image_edit") {
-      if (!list.length) { formError("请选择一张待处理图片"); return null; }
-      fd.append("file", list[0], list[0].name);
-    } else {
-      if (!list.length) { formError("请先上传文件"); return null; }
-      list.forEach(function (f) { fd.append("files", f, f.name); });
-    }
+    fd.append("payload", JSON.stringify(payload));
+    (FILE_SPECS[mode] || []).forEach(function (spec) {
+      var list = modeFiles(mode)[spec.key] || [];
+      if (spec.key === "files") {
+        list.forEach(function (f) { fd.append("files", f, f.name); });
+      } else if (list.length) {
+        fd.append(spec.key, list[0], list[0].name);
+      }
+    });
     return { headers: {}, body: fd };
   }
 
-  function startPolling(jobId) {
+  function startPolling(jobId, statusBase) {
     stopPolling();
-    state.pollTimer = setInterval(function () { pollStatus(jobId); }, 2000);
-    pollStatus(jobId);
+    // 状态前缀在提交时固定（ui_gen 双模式同前缀、animations/animate 不同前缀），
+    // 轮询期间用户切换模式不改变本任务的查询路径
+    state.pollTimer = setInterval(function () { pollStatus(jobId, statusBase); }, 2000);
+    pollStatus(jobId, statusBase);
   }
   function stopPolling() {
     if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; }
   }
 
-  function pollStatus(jobId) {
-    fetch(ROUTES[state.mode].status + "/" + encodeURIComponent(jobId))
+  function pollStatus(jobId, statusBase) {
+    fetch(statusBase + "/" + encodeURIComponent(jobId))
       .then(function (resp) {
         if (!resp.ok) throw new Error("HTTP " + resp.status);
         return resp.json();
@@ -422,9 +784,10 @@
         if (job.status === "succeeded") {
           stopPolling();
           setBusy(false);
-          if (els.status) setStatus("完成，共 " + (job.outputs || []).length + " 个产物", "ok");
+          var n = (job.outputs || []).length;
           var line = $("status-line");
-          if (line) line.textContent = "完成，共 " + (job.outputs || []).length + " 个产物";
+          if (line) line.textContent = "完成，共 " + n + " 个产物";
+          if (els.status) setStatus("完成，共 " + n + " 个产物", "ok");
           renderResult(job);
         } else if (job.status === "failed") {
           stopPolling();
@@ -432,9 +795,9 @@
           formError("任务失败：" + (job.error || "未知错误"));
         } else {
           var txt = job.status === "running" ? "生成中…" : "排队中…";
-          if (els.status) setStatus(txt, "busy");
           var line2 = $("status-line");
           if (line2) line2.textContent = txt;
+          if (els.status) setStatus(txt, "busy");
         }
       })
       .catch(function (err) {
@@ -454,9 +817,10 @@
     box.innerHTML = "";
     els.empty.style.display = "none";
     var grid = h("div", { class: "result-grid" });
+    var jsonOutputs = [];
     (job.outputs || []).forEach(function (out) {
-      if (out.format === "json") return; // components.json 走下载链接（下一段渲染报告）
-      var fig = h("div", null);
+      if (out.format === "json") { jsonOutputs.push(out); return; }
+      var fig = h("div");
       var img = h("img", { alt: out.filename, src: artifactUrl(job.job_id, out.filename) });
       img.loading = "lazy";
       fig.appendChild(img);
@@ -465,9 +829,20 @@
       grid.appendChild(fig);
     });
     box.appendChild(grid);
+    if (jsonOutputs.length) {
+      jsonOutputs.forEach(function (out) {
+        box.appendChild(h("a", {
+          class: "inline-action",
+          href: artifactUrl(job.job_id, out.filename),
+          download: out.filename,
+          text: "下载 " + out.filename
+        }));
+      });
+    }
   }
 
-  /* ---------- 会话任务列表（本轮内存态） ---------- */
+  /* ---------- 会话任务列表（本轮内存态；跨会话历史待 GET /api/v1/jobs 后再做） ---------- */
+  var lastViewed = null;
   function trackJob(jobId) {
     var exists = state.history.filter(function (j) { return j.jobId === jobId; }).length;
     if (!exists) {
@@ -498,7 +873,6 @@
       }));
     });
   }
-  var lastViewed = null;
 
   /* ---------- 面板拖拽调宽 + 收起（官方 workspace 核心交互观感） ---------- */
   var PANEL_MIN = 320, PANEL_MAX = 560;
