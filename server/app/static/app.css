@@ -43,17 +43,22 @@
   --theme-hero-gradient:linear-gradient(135deg, #020214 0%, #5656a9 36%, #ef2cc1 72%, #2c9cff 100%);
   --theme-panel-bg:linear-gradient(180deg, #0f0f3aeb, #010120f5);
   --theme-panel-soft-bg:linear-gradient(180deg, #ffffffb3, #f8f8ff94);
-  --theme-panel-border:#ffffff1f;
-  --theme-panel-hover:#ffffff14;
-  --theme-panel-text:#fff;
-  --theme-panel-text-muted:#ffffff75;
+  /* 工作台参数面板：官方工作台实拍（2026-09-21 用户提供登录后截图）为白底浅面板，
+     非 landing CSS 变量里的深藏青——深藏青保留变量定义但不再用于面板 */
+  --theme-panel-border:#00000014;
+  --theme-panel-hover:#0000000a;
+  --theme-panel-text:#0f172a;
+  --theme-panel-text-muted:#0000008c;
   --theme-panel-contrast-bg:#fff;
   --theme-panel-contrast-text:#010120;
   --theme-panel-contrast-border:#fff;
-  --theme-settings-bg:linear-gradient(180deg, #0e0e34, #010120);
-  --theme-input-bg:#ffffffb3;
-  --theme-input-text:#000;
-  --theme-input-border:#00000014;
+  --theme-settings-bg:#ffffff;
+  --theme-input-bg:#f1f5f9;
+  --theme-input-text:#0f172a;
+  --theme-input-border:#e2e8f0;
+  /* 画布点阵场（官方工作台画布 = 浅灰绿底 + 细点阵，浮层控件在角落） */
+  --canvas-field-bg:#eef0ea;
+  --canvas-field-dot:#d9ddd2;
   --theme-action-bg:#010120;
   --theme-action-text:#fff;
   --theme-action-border:#010120;
@@ -88,9 +93,17 @@
   --theme-header-bg:#010120b8;
   --theme-hero-gradient:linear-gradient(135deg, #fff 0%, #d8d7ff 42%, #7dc4ff 100%);
   --theme-panel-soft-bg:linear-gradient(180deg, #ffffff1a, #ffffff0f);
+  /* 暗色：面板回深藏青玻璃（与亮色白面板对偶） */
+  --theme-panel-border:#ffffff1f;
+  --theme-panel-hover:#ffffff14;
+  --theme-panel-text:#fff;
+  --theme-panel-text-muted:#ffffff75;
+  --theme-settings-bg:linear-gradient(180deg, #0e0e34, #010120);
   --theme-input-bg:#ffffff14;
   --theme-input-text:#fff;
   --theme-input-border:#ffffff1f;
+  --canvas-field-bg:#0b0b28;
+  --canvas-field-dot:#22224a;
   --theme-action-bg:#fff;
   --theme-action-text:#010120;
   --theme-action-border:#ffffffe0;
@@ -199,10 +212,7 @@ body {
   margin: 0;
   font-size: 20px;
   font-weight: 800;
-  background: var(--theme-hero-gradient);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--theme-text-primary); /* 官方标题为纯色高对比，渐变字弃用 */
 }
 .app-header .subtitle { margin: 0; font-size: 13px; color: var(--theme-text-muted); }
 .app-header .spacer { flex: 1; }
@@ -256,11 +266,11 @@ button.theme-toggle:hover { transform: translateY(-1px); border-color: var(--the
   padding: 14px 24px 0;
 }
 .mode-tab {
-  min-height: 40px;
-  padding: 8px 16px;
+  min-height: 36px;
+  padding: 7px 16px;
   background: var(--theme-surface-soft);
   border: 1px solid var(--theme-line);
-  border-radius: 12px;
+  border-radius: 999px; /* 官方顶部导航为胶囊组，激活黑底白字 */
   color: var(--theme-text-secondary);
   font: inherit;
   font-size: 13px;
@@ -275,21 +285,21 @@ button.theme-toggle:hover { transform: translateY(-1px); border-color: var(--the
   color: var(--theme-action-text);
 }
 
-/* ===== 工作区骨架:左画布 + 右设置面板(可拖拽调宽,收起动效实测)===== */
+/* ===== 工作区骨架:左画布(点阵场本体) + 右参数面板(通栏,可拖拽调宽)===== */
 .workspace {
   position: relative;
   z-index: 1;
   display: flex;
   align-items: stretch;
-  min-height: calc(100vh - 118px);
-  padding: 0 24px 24px;
+  min-height: calc(100vh - 131px);
+  padding: 0;
   gap: 0;
 }
 .canvas-wrap {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
-  padding: 24px 16px 0 0;
+  padding: 0;
 }
 .settings-shell {
   position: relative;
@@ -328,15 +338,48 @@ button.theme-toggle:hover { transform: translateY(-1px); border-color: var(--the
 }
 .settings-shell.is-collapsed #panel-collapse .glyph { display: inline-block; transform: rotate(180deg); }
 
-/* 左:画布/产物预览区(主面板 32px 圆角 + 卡片投影) */
+/* 左:画布/产物预览区(官方工作台形态:画布即页面本体,浅灰绿点阵场,浮层控件在角落) */
 .canvas-area {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 16px;
   padding: 24px;
-  border-radius: 32px;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, .14);
+  background-color: var(--canvas-field-bg);
+  background-image: radial-gradient(var(--canvas-field-dot) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+/* 左下角浮动工具条(视觉占位:缩放/图层功能后续轮,禁用态+悬停说明,不做假交互) */
+.canvas-toolbar {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  background: var(--theme-panel-contrast-bg);
+  border: 1px solid var(--theme-line);
+  border-radius: 999px;
+  box-shadow: 0 10px 24px #0f172a0d;
+}
+.canvas-toolbar .tool-pill {
+  padding: 4px 12px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  color: #64748b; /* 工具条恒白底（对比面板设计），文字用固定石板色 */
+}
+.canvas-toolbar .tool-btn {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: #334155;
+  font-size: 13px;
+  cursor: not-allowed;
 }
 .canvas-empty {
   margin: auto;
@@ -394,16 +437,33 @@ button.theme-toggle:hover { transform: translateY(-1px); border-color: var(--the
   text-align: center;
 }
 
-/* ===== 右:设置面板(深藏青渐变玻璃,亮暗同值=官方对比面板)===== */
+/* ===== 右:参数面板(官方工作台形态:白底通栏面板,左缘 1px 分隔线,无卡片圆角)===== */
 .settings-panel {
   height: 100%;
-  max-height: calc(100vh - 142px);
   overflow-y: auto;
-  padding: 16px;
-  border: 1px solid var(--theme-panel-border);
-  border-radius: 24px;
+  padding: 20px 16px 16px;
+  border: 0;
+  border-left: 1px solid var(--theme-line);
+  border-radius: 0;
   background: var(--theme-settings-bg);
   color: var(--theme-panel-text);
+}
+/* 面板 intro 头(官方:居中小 mono 标签 + 大标题 + 一句描述) */
+.panel-intro {
+  text-align: center;
+  padding: 8px 8px 4px;
+  margin-bottom: 12px;
+}
+.panel-intro h2 {
+  margin: 4px 0 6px;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--theme-panel-text);
+}
+.panel-intro p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--theme-panel-text-muted);
 }
 .settings-panel section + section {
   border-top: 1px solid var(--theme-panel-border);
@@ -547,14 +607,16 @@ textarea.input { resize: vertical; }
 .swatch:hover { transform: translateY(-1px); }
 .swatch.is-active { box-shadow: inset 0 0 0 1px #bdbbff33, 0 0 0 2px var(--lavender); }
 
-/* ===== 主按钮(主题 action 面)===== */
+/* ===== 主按钮(官方形态:黑色胶囊,右下角对齐如发送键;暗色反转白底)===== */
+.submit-section { display: flex; flex-direction: column; }
+.submit-section .primary-btn { align-self: flex-end; }
 button.primary-btn {
-  width: 100%;
+  min-width: 128px;
   min-height: 38px;
-  padding: 10px 16px;
+  padding: 10px 24px;
   background: var(--theme-action-bg);
   border: 1px solid var(--theme-action-border);
-  border-radius: 10px;
+  border-radius: 999px;
   color: var(--theme-action-text);
   font-family: inherit;
   font-size: 13px;
@@ -737,12 +799,13 @@ button.primary-btn:disabled { opacity: .5; cursor: not-allowed; }
 /* ===== 响应式(<1024px 单栏,面板移到画布下方)===== */
 @media (max-width: 1023px) {
   .workspace { flex-direction: column; min-height: 0; }
-  .canvas-wrap { padding: 16px 0 0; }
+  .canvas-wrap { padding: 0; }
+  .canvas-area { min-height: 320px; }
   .settings-shell {
     flex: none;
     width: 100%;
     transition: none;
   }
   .workspace-resize-handle { display: none; }
-  .settings-panel { max-height: none; }
+  .settings-panel { border-left: 0; border-top: 1px solid var(--theme-line); }
 }

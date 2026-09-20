@@ -70,13 +70,20 @@ _PAGE_TEMPLATE = """<!DOCTYPE html>
 </nav>
 <main class="workspace">
   <div class="canvas-wrap">
-    <section class="canvas-area glass-panel gold-ring" aria-label="画布预览">
+    <section class="canvas-area" aria-label="画布预览">
       <div id="history-strip" class="history-strip" aria-label="本次会话任务"></div>
       <div id="canvas-empty" class="canvas-empty">
         <p class="canvas-empty-title">画布还是空的</p>
         <p class="canvas-empty-hint">在右侧控制面板填写参数并提交，产物与报告在此呈现</p>
       </div>
       <div id="result" class="result-stack"></div>
+      <div class="canvas-toolbar" aria-label="画布工具（装饰占位）">
+        <span class="tool-pill">100%</span>
+        <button class="tool-btn" type="button" disabled
+                title="画布缩放：视觉占位，功能待后续轮">⤢</button>
+        <button class="tool-btn" type="button" disabled
+                title="图层列表：视觉占位，功能待后续轮">▤</button>
+      </div>
     </section>
   </div>
   <div id="settings-shell" class="settings-shell">

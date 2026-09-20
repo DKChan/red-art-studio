@@ -63,6 +63,18 @@
     animate: "精灵动画生成"
   };
 
+  /* 面板 intro 头的一句话描述（官方工作台：居中 mono 标签 + 大标题 + 描述） */
+  var MODE_DESCRIPTIONS = {
+    generation: "文本生成图像素材，适合图标、道具与概念图。",
+    image_edit: "像素化、去背与无缝化三件套，确定性本地处理。",
+    texture: "生成可平铺的 64×64 无缝纹理，支持等距投影。",
+    tileset: "双纹理合成 256×256 dual-grid 地形图集。",
+    ui_gen: "生成游戏 UI 并做组件分割，输出聚合表与组件数据。",
+    ui_extract: "从已有 UI 图提取组件并重排为聚合表。",
+    anim_pack: "静帧序列打包为 spritesheet 或动图，附循环检报告。",
+    animate: "逐帧生成精灵动画，调色板统一，附生成报告。"
+  };
+
   var ANIM_TYPES = ["idle", "walk", "run", "jump", "attack", "hit", "defeated", "other"];
   var BG_COLORS = ["#000000", "#ffffff", "#cccccc", "#808080", "#333333"];
 
@@ -304,6 +316,13 @@
   function $(id) { return document.getElementById(id); }
   var els = {};
 
+  /* 配置加载期给每个字段生成稳定 DOM id（composer 沉底重排后 showIf 定位不错位） */
+  Object.keys(FIELDS).forEach(function (mode) {
+    FIELDS[mode].forEach(function (spec, i) {
+      spec._fid = spec.key || "note-" + mode + "-" + i;
+    });
+  });
+
   function h(tag, attrs, children) {
     var node = document.createElement(tag);
     if (attrs) {
@@ -361,6 +380,13 @@
     var group = MODE_GROUPS.filter(function (g) { return g.id === state.group; })[0];
     if (!group) return;
 
+    // intro 头（官方工作台形态：居中小 mono 标签 + 模式名 + 一句描述）
+    panel.appendChild(h("div", { class: "panel-intro" }, [
+      h("span", { class: "section-label", text: "red art studio" }),
+      h("h2", { text: MODE_LABELS[state.mode] || state.mode }),
+      h("p", { text: MODE_DESCRIPTIONS[state.mode] || "" })
+    ]));
+
     // 组内二级分段（>1 个模式时）
     if (group.modes.length > 1) {
       var bar = h("div", { class: "submode-bar" });
@@ -379,7 +405,10 @@
 
     var form = h("form", { id: "job-form", novalidate: "novalidate" });
     var fields = FIELDS[state.mode] || [];
-    fields.forEach(function (spec, i) {
+    // composer 沉底（官方工作台：参数在上，prompt 输入区在面板底部）
+    var ordered = fields.filter(function (f) { return f.type !== "composer"; })
+      .concat(fields.filter(function (f) { return f.type === "composer"; }));
+    ordered.forEach(function (spec, i) {
       form.appendChild(renderField(spec, i));
     });
     // 上传槽位（multipart 线）
@@ -387,13 +416,13 @@
       form.appendChild(renderFileField(spec));
     });
 
-    form.appendChild(h("section", null, [
+    form.appendChild(h("section", { class: "submit-section" }, [
+      h("div", { id: "status-line", class: "status-line", role: "status" }),
+      h("div", { id: "error-line", class: "error-line", role: "alert" }),
       h("button", {
         id: "submit-btn", class: "primary-btn", type: "submit",
         text: state.busy ? "提交中…" : submitLabel(state.mode)
-      }),
-      h("div", { id: "status-line", class: "status-line", role: "status" }),
-      h("div", { id: "error-line", class: "error-line", role: "alert" })
+      })
     ]));
     form.addEventListener("submit", onSubmit);
     panel.appendChild(form);
@@ -411,12 +440,8 @@
     return "生成";
   }
 
-  function fieldId(spec, index) {
-    return spec.key || "note-" + index; // note 行无键，按位置唯一化
-  }
-
-  function renderField(spec, index) {
-    var wrap = h("div", { class: "field", "data-field": fieldId(spec, index) });
+  function renderField(spec) {
+    var wrap = h("div", { class: "field", "data-field": spec._fid });
     var vals = modeValues(state.mode);
 
     if (spec.type === "note") {
@@ -658,8 +683,8 @@
     var form = $("job-form");
     if (!form) return;
     var vals = modeValues(state.mode);
-    (FIELDS[state.mode] || []).forEach(function (spec, i) {
-      var node = form.querySelector('[data-field="' + fieldId(spec, i) + '"]');
+    (FIELDS[state.mode] || []).forEach(function (spec) {
+      var node = form.querySelector('[data-field="' + spec._fid + '"]');
       if (!node) return;
       var visible = !spec.showIf || spec.showIf(vals);
       node.style.display = visible ? "" : "none";
