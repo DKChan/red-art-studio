@@ -10,15 +10,25 @@
 - **范围**：仿主要功能，不需要与原版的实现逻辑/参数契约对齐；open-questions 台账降级为"参考性调研记录"，不再作为对齐目标
 - **优先级**：美术素材生成最优先（文生图/后处理/纹理瓦片/UI/动画/风格一致性），音频、策划 Agent 滞后
 
-## Quickstart（P1：文生图竖切）
+## Quickstart
 
-要求：Python 3.11+，[uv](https://docs.astral.sh/uv/)。P1 当前仅 API（Web 前端 P2 前补）。
+要求：Python 3.11+（uv 自动管理虚拟环境），[uv](https://docs.astral.sh/uv/)。
+推理后端默认 pollinations（免 key 直连），**开箱即用**；要换后端见手动步骤第 2 步。
+
+### 一键启动（推荐）
+
+- **Windows**：双击 `start.bat`
+- **Linux/macOS**：`./start.sh`
+
+脚本做四件事：检查 uv → `uv sync` 装依赖 → 在 8600 端口启动服务（已在跑则跳过）→ 自动打开浏览器进工作台。服务跑在独立窗口/后台，关掉即停。
+
+### 手动步骤
 
 ```bash
 # 1. 安装依赖
 uv sync
 
-# 2. 配置推理后端（复制示例后按需修改；不建 .env 也有内置默认值）
+# 2.（可选）配置推理后端：复制示例后按需修改；不建 .env 也有内置默认值（pollinations 免 key）
 cp .env.example .env
 #   → 免 key 快速体验：PROVIDER=pollinations（pollinations.ai 直连，无需任何配置）
 #   → 用本地 ComfyUI：PROVIDER=comfyui，PROVIDER_BASE_URL=http://127.0.0.1:8188
@@ -26,30 +36,34 @@ cp .env.example .env
 
 # 3. 启动服务（端口 8600，避开 ComfyUI 8188）
 uv run uvicorn server.app.main:app --port 8600
+```
 
-# 4. 提交生成任务（异步：202 受理，后台执行）
+### 使用
+
+- **Web 工作台**：浏览器打开 `http://127.0.0.1:8600/`——八条能力线全部有界面（图像生成 / 图像处理 / 纹理与瓦片 / UI 聚合表 / 精灵动画），右上角可切亮暗主题，报告与组件数据在画布区如实呈现
+- **API 调用**（示例：文生图；其余 7 条线见 `/docs`）：
+
+```bash
 curl -s -X POST http://127.0.0.1:8600/api/v1/generations \
   -H 'Content-Type: application/json' \
   -d '{"prompt": "pixel art sword icon, 16-bit retro style", "size": "1024x1024", "n": 1}'
-# → {"job_id": "...", "status": "pending"}
-
-# 5. 轮询任务状态（succeeded 时 outputs 附产物清单）
+# → {"job_id": "...", "status": "pending"}（异步受理，轮询见下）
 curl -s http://127.0.0.1:8600/api/v1/generations/<job_id>
+```
 
-# 产物落盘在 data/artifacts/<job_id>/（图片 + final_outputs.json），
-# 任务记录在 data/jobs/<job_id>/job.json
+产物落盘在 `data/artifacts/<job_id>/`（图片 + final_outputs.json），任务记录在 `data/jobs/<job_id>/job.json`。
+交互式 API 文档：`http://127.0.0.1:8600/docs`（OpenAPI schema 在 `/openapi.json`）。
 
+```bash
 # 测试与 lint（测试全 mock，永不真实调用外部服务）
 uv run pytest
 uv run ruff check .
 ```
 
-交互式 API 文档：服务启动后访问 `http://127.0.0.1:8600/docs`（OpenAPI schema 在 `/openapi.json`）。
-
-## 架构（P1 定稿）
+## 架构（P1 定稿，Web 前端已补齐）
 
 ```
-Web 前端（P1 仅 API，页面后补）
+Web 前端（单页工作台：static/app.css + app.js，路由表驱动 8 条能力线表单）
    │
 FastAPI (api/) ── 核心资产：preset 体系 / job 状态机 / 输出契约 / 确定性后处理
                   │  POST /api/v1/generations → 202 {job_id}
